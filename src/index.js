@@ -8,7 +8,6 @@ const path = require('path');
 const utils = require('./utils');
 
 const app = express();
-const hostname = '127.0.0.1';
 const port = 3000;
 const server = http.Server(app);
 
@@ -47,16 +46,19 @@ const setupEndpoints = (app) => {
 
   // Handle GitHub app user authorisation callback.
   app.get('/callback', (req, res) => {
+    console.log(req.body);
+
     res.status(200);
-
-    console.log(req);
-
     res.end();
   });
 
   // Handle GitHub app webhook.
   app.post('/webhook', (req, res) => {
-    console.log(req);
+    console.log(req.body);
+
+    // Extract relevant fields from webhook.
+    const commits = req.body.commits;
+    const repo = repository.id;
 
     res.status(200);  
     res.end();
@@ -66,7 +68,7 @@ const setupEndpoints = (app) => {
 setupExpress(app);
 setupEndpoints(app);
 
-server.listen(port, hostname, (err) => {
+server.listen(port, (err) => {
   if (err) {
     throw err;
   }
