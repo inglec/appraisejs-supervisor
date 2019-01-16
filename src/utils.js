@@ -1,3 +1,9 @@
 const toHeaderField = array => array.join(', ');
 
-module.exports = { toHeaderField };
+const toPrettyString = (string) => {
+  const json = JSON.parse(string);
+  const pretty = JSON.stringify(json, null, 2);
+  return pretty;
+};
+
+module.exports = { toHeaderField, toPrettyString };

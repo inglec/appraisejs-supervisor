@@ -1,22 +1,20 @@
 {
-  "name": "fyp-server",
+  "name": "fyp-webhook-server",
   "version": "1.0.0",
-  "description": "",
+  "description": "Handles GitHub webhooks and allocates jobs to child job servers",
   "main": "src/index.js",
-  "directories": {
-    "test": "test"
-  },
   "dependencies": {
     "body-parser": "^1.18.3",
     "escodegen": "^1.11.0",
     "esprima": "^4.0.1",
     "express": "^4.16.4",
+    "jsonwebtoken": "^8.4.0",
     "lodash": "^4.17.11",
     "shelljs": "^0.8.3"
   },
   "scripts": {
-    "start": "node src/index.js"
+    "start-windows": "powershell -NoProfile -ExecutionPolicy Unrestricted -Command setup/windows/start.ps1"
   },
-  "author": "",
+  "author": "Ciarán Ingle",
   "license": "ISC"
 }
