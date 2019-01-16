@@ -1,3 +1,7 @@
+const fs = require('fs');
+const https = require('https');
+const jwt = require('jsonwebtoken');
+
 const generateJWT = (appId, privateKeyPath) => {
   const privateKey = fs.readFileSync(privateKeyPath);
 

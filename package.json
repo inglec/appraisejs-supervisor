@@ -14,6 +14,7 @@
     "shelljs": "^0.8.3"
   },
   "scripts": {
+    "start-linux": "APP_ID=23609 node src/index.js",
     "start-windows": "powershell -NoProfile -ExecutionPolicy Unrestricted -Command setup/windows/start.ps1"
   },
   "author": "Ciarán Ingle",

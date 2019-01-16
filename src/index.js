@@ -1,13 +1,10 @@
 const bodyParser = require('body-parser');
 // const childProcess = require('child_process');
 const express = require('express');
-const fs = require('fs');
 const http = require('http');
-const https = require('https');
-const jwt = require('jsonwebtoken');
+const httpStatus = require('http-status-codes');
 const path = require('path');
 // const shell = require('shelljs');
-const httpStatus = require('http-status-codes');
 
 const utils = require('./utils');
 
@@ -30,13 +27,16 @@ const requestAccessToken = (jwt, installationId) => {
 };
 
 const processPushWebhook = (payload) => {
-  console.log(payload);
-
   const privateKeyPath = path.join(__dirname, '../keys', 'private-key.pem');
   const jwt = utils.generateJWT(process.env.APP_ID, privateKeyPath);
 
+  console.log(payload.installation.id)
+
   requestAccessToken(jwt, payload.installation.id)
     .then((response) => {
+      const accessToken = response.token;
+      const expiry = new Date(response.expires_at);
+
       console.log(response);
     })
 };
@@ -79,7 +79,7 @@ const setupExpress = (app) => {
 
 setupExpress(app);
 
-server.listen(port, hostname, (err) => {
+server.listen(port, (err) => {
   if (err) {
     throw err;
   }
