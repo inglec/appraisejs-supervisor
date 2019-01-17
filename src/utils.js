@@ -1,26 +1,9 @@
-const fs = require('fs');
 const https = require('https');
-const jwt = require('jsonwebtoken');
 
-const generateJWT = (appId, privateKeyPath) => {
-  const privateKey = fs.readFileSync(privateKeyPath);
-
-  // Get number of seconds since Epoch.
-  const time = Math.floor(new Date().getTime() / 1000);
-  const payload = {
-    iat: time, // Issued at time.
-    exp: time + (10 * 60), // Expiration time (10 minute maximum).
-    iss: appId
-  };
-
-  // Sign JSON Web Token and encode with RS256.
-  return jwt.sign(payload, privateKey, { algorithm: 'RS256' });
-};
-
-const httpRequestPromise = (options) => {
+const httpsRequestPromise = (options, payload) => {
   return new Promise((resolve, reject) => {
     const req = https.request(options, (res) => {
-      var buffer = '';
+      let buffer = '';
 
       res.on('data', (data) => {
         buffer += data.toString();
@@ -32,6 +15,10 @@ const httpRequestPromise = (options) => {
     });
 
     req.on('error', err => reject(err));
+
+    if (payload) {
+      req.send(payload);
+    }
 
     req.end();
   });
@@ -45,8 +32,7 @@ const toPrettyString = (string) => {
 };
 
 module.exports = {
-  generateJWT,
-  httpRequestPromise,
+  httpsRequestPromise,
   toHeaderField,
   toPrettyString
 };
