@@ -61,7 +61,7 @@ const cache = {
     });
 
     // Reset expired JSON Web Token.
-    if (cache.jwt.expiry < timestamp) {
+    if (cache.jwt !== null && cache.jwt.expiry < timestamp) {
       cache.jwt = null;
       console.log('Cleared expired JWT');
     }
@@ -71,9 +71,8 @@ const cache = {
 const getJWT = () => {
   const time = new Date();
 
-  // Attempt to retrieve JWT from cache.
   const cachedJWT = cache.getJWT();
-  if (cachedJWT) {
+  if (cachedJWT !== null) {
     return cachedJWT;
   }
 
@@ -90,7 +89,6 @@ const getJWT = () => {
   const privateKey = fs.readFileSync(path.join(__dirname, '../keys', 'private-key.pem'));
   const token = jwt.sign(payload, privateKey, { algorithm: 'RS256' });
 
-  // Cache new JWT.
   cache.storeJWT(token, expiry * 1000);
 
   return token;
@@ -106,32 +104,28 @@ const requestAccessToken = (installationId) => {
     hostname: 'api.github.com',
     method: 'POST',
     path: `/app/installations/${installationId}/access_tokens`
-  }).then((response) => {
-    // Cache access token for one hour.
-    cache.storeAccessToken(installationId, response.token, response.expires_at);
-    return response.token;
-  })
+  });
+};
+
+const doThing = (token) => {
+  console.log(token);
 };
 
 const processPushWebhook = (payload) => {
-  // Attempt to retrieve access token from cache.
-  new Promise((resolve, reject) => {
-    const token = cache.getAccessToken(payload.installation.id, new Date());
-    if (token === null) {
-      reject('No cached token');
-    }
-    else {
-      resolve(token);
-    }
-  })
-    .catch((err) => {
-      // Access token is not cached, so we request a new one.
-      return requestAccessToken(payload.installation.id);
-    })
-    .then((accessToken) => {
-      // We have our access token at this point.
-      console.log(accessToken);
-    })
+  const token = cache.getAccessToken(payload.installation.id, new Date());
+  if (token !== null) {
+    // Successfully retrieved access token from cache.
+    doThing(token);
+  }
+  else {
+    // Request a new access token from GitHub.
+    requestAccessToken(payload.installation.id)
+      .then((response) => {
+        cache.storeAccessToken(payload.installation.id, response.token, response.expires_at);
+        doThing(response.token);
+      })
+      .catch(err => console.log(err));
+  }
 };
 
 const setupExpress = (app) => {
