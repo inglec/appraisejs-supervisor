@@ -1,25 +1,19 @@
 const _ = require('lodash');
 const bodyParser = require('body-parser');
-// const childProcess = require('child_process');
 const express = require('express');
 const fs = require('fs');
 const http = require('http');
 const httpStatus = require('http-status-codes');
 const jwt = require('jsonwebtoken');
 const path = require('path');
-// const shell = require('shelljs');
 
+const config = require('../config.json');
 const utils = require('./utils');
 
 const app = express();
 const hostname = '127.0.0.1';
 const port = 3000;
 const server = http.Server(app);
-
-const githubAPIHeader = {
-  'Accept': 'application/vnd.github.machine-man-preview+json',
-  'User-Agent': 'AppraiseJs'
-};
 
 const cache = {
   accessTokens: {},
@@ -73,6 +67,17 @@ const cache = {
   }
 };
 
+// TODO: Implement job queue.
+const jobQueue = {
+  jobs: [],
+  enqueue: function(job) {
+    this.jobs.push(job);
+  },
+  dequeue: function() {
+    return this.jobs.shift();
+  }
+};
+
 const getJWT = () => {
   const time = new Date();
 
@@ -87,7 +92,7 @@ const getJWT = () => {
   const payload = {
     iat: seconds, // Issued at time.
     exp: expiry, // Expiration time (10 minute maximum).
-    iss: process.env.APP_ID
+    iss: config.appId
   };
 
   // Sign JSON Web Token and encode with RS256.
@@ -99,50 +104,39 @@ const getJWT = () => {
   return token;
 }
 
-const getAccessToken = (installationId) => {
-  const token = cache.getAccessToken(installationId, new Date());
-  if (token !== null) {
-    // Successfully retrieved access token from cache.
-    return new Promise(resolve => resolve(token));
+const getAccessTokenPromise = (installationId) => {
+  // Attempt to retrieve token from cache.
+  const cached = cache.getAccessToken(installationId, new Date());
+  if (cached !== null) {
+    return Promise.resolve(cached);
   }
-  else {
-    // Request a new access token from GitHub.
-    return utils.httpsRequestPromise({
-      headers: {
-        ...githubAPIHeader,
-        'Authorization': `Bearer ${getJWT()}`
-      },
-      hostname: 'api.github.com',
-      method: 'POST',
-      path: `/app/installations/${installationId}/access_tokens`
-    }).then((response) => {
-      cache.storeAccessToken(installationId, response.token, response.expires_at);
-      return response.token;
-    });
-  }
-}
 
-const getRepository = (accessToken, repoFullName) => {
+  // Request a new access token from GitHub.
   return utils.httpsRequestPromise({
     headers: {
-      ...githubAPIHeader,
-      'Authorization': `token ${accessToken}`
+      'Accept': 'application/vnd.github.machine-man-preview+json',
+      'Authorization': `Bearer ${getJWT()}`,
+      'User-Agent': config.appName
     },
     hostname: 'api.github.com',
-    method: 'GET',
-    path: `/repos/${repoFullName}/commits/693230573f2b7953dee10148004281f73d26bb2f`
-  });
-};
+    method: 'POST',
+    path: `/app/installations/${installationId}/access_tokens`
+  })
+    .then((response) => {
+      const json = JSON.parse(response);
+      cache.storeAccessToken(installationId, json.token, json.expires_at);
+      return json.token;
+    });
+}
 
 const processPushWebhook = (payload) => {
-  console.log(payload);
-
-  getAccessToken(payload.installation.id)
+  getAccessTokenPromise(payload.installation.id)
     .then((token) => {
       console.log(token);
 
-      // getRepository(token, payload.repository.fullname)
-      //   .then((response) => console.log(response))
+      // payload.commits.forEach((commit) => {
+      //
+      // });
     })
     .catch(err => console.log(err))
 };
@@ -163,17 +157,45 @@ const setupExpress = (app) => {
     next();
   });
 
-  // Routes.
+  // GET routes.
   app.get('/', (req, res) => {
     res.status(httpStatus.OK);
-    res.send('Hello world');
+    res.send('Test route');
     res.end();
   });
-  app.get('/callback', (req, res) => {
-    res.status(httpStatus.OK);
-    res.end();
 
-    console.log(req.body);
+  // POST routes.
+  app.post('/authenticate', (req, res) => {
+    const postData = {
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      code: req.body.code
+    };
+
+    const postConfig = {
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      hostname: 'github.com',
+      method: 'POST',
+      path: '/login/oauth/access_token'
+    };
+
+    // Forward access token request to GitHub.
+    utils.httpsRequestPromise(postConfig, JSON.stringify(postData))
+      .then((response) => {
+        console.log(response);
+        res.status(httpStatus.OK);
+        res.send(response);
+        res.end();
+      })
+      .catch((err) => {
+        res.status(httpStatus.INTERNAL_SERVER_ERROR);
+        res.end();
+
+        console.log(err);
+      });
   });
   app.post('/webhook', (req, res) => {
     res.status(httpStatus.OK);
@@ -184,13 +206,8 @@ const setupExpress = (app) => {
 };
 
 const test = () => {
-  const payload = {
-    commits: [{
-      id: 'a89615fd890a485930ecb2dfc6eb9b651c3d443e'
-    }]
-    installation: { id: 584866 },
-    repository: { fullname: 'inglec/fyp-test' }
-  };
+  const text = fs.readFileSync(path.join(__dirname, '../testing', 'sampleWebhook.json'));
+  const payload = JSON.parse(text);
 
   processPushWebhook(payload);
   // setTimeout(() => processPushWebhook(payload), 5000);
@@ -207,10 +224,10 @@ function main() {
     console.log(`Listening on port ${port}...`);
   });
 
-  // Clear cached data every 5 minutes.
+  // Clear cached postData every 5 minutes.
   setInterval(() => cache.clear(new Date()), 300000);
 
-  // test();
+  test();
 }
 
 main();

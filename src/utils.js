@@ -1,4 +1,15 @@
+const _ = require('lodash');
 const https = require('https');
+
+const appendUrlParams = (url, params) => {
+  const query = _
+    .chain(params)
+    .map((value, key) => `${key}=${value}`)
+    .join('&')
+    .value();
+
+  return `${url}?${query}`;
+};
 
 const httpsRequestPromise = (options, payload) => {
   return new Promise((resolve, reject) => {
@@ -9,15 +20,15 @@ const httpsRequestPromise = (options, payload) => {
         buffer += data.toString();
       });
 
-      res.on('error', err => reject(err));
+      res.on('end', () => resolve(buffer));
 
-      res.on('end', () => resolve(JSON.parse(buffer)));
+      res.on('error', err => reject(err));
     });
 
     req.on('error', err => reject(err));
 
     if (payload) {
-      req.send(payload);
+      req.write(payload);
     }
 
     req.end();
@@ -32,6 +43,7 @@ const toPrettyString = (string) => {
 };
 
 module.exports = {
+  appendUrlParams,
   httpsRequestPromise,
   toHeaderField,
   toPrettyString

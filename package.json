@@ -5,17 +5,13 @@
   "main": "src/index.js",
   "dependencies": {
     "body-parser": "^1.18.3",
-    "escodegen": "^1.11.0",
-    "esprima": "^4.0.1",
     "express": "^4.16.4",
     "http-status-codes": "^1.3.0",
     "jsonwebtoken": "^8.4.0",
     "lodash": "^4.17.11",
-    "shelljs": "^0.8.3"
   },
   "scripts": {
-    "start-linux": "APP_ID=23609 node src/index.js",
-    "start-windows": "powershell -NoProfile -ExecutionPolicy Unrestricted -Command setup/windows/start.ps1"
+    "start": "node src/index.js"
   },
   "author": "Ciarán Ingle",
   "license": "ISC"
