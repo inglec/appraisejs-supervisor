@@ -1,19 +1,18 @@
+const axios = require('axios');
 const _ = require('lodash');
 const bodyParser = require('body-parser');
 const express = require('express');
 const fs = require('fs');
-const http = require('http');
 const httpStatus = require('http-status-codes');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 
 const config = require('../config.json');
-const utils = require('./utils');
-
-const app = express();
-const hostname = '127.0.0.1';
-const port = 3000;
-const server = http.Server(app);
+const {
+  getAccessToken,
+  getInstallationAccessToken,
+} = require('./utils/github_api');
+const { toHeaderField } = require('./utils/requests');
 
 const cache = {
   accessTokens: {},
@@ -105,29 +104,11 @@ const getJWT = () => {
 }
 
 const getAccessTokenPromise = (installationId) => {
-  // Attempt to retrieve token from cache.
-  const cached = cache.getAccessToken(installationId, new Date());
-  if (cached !== null) {
-    return Promise.resolve(cached);
-  }
-
-  // Request a new access token from GitHub.
-  return utils.httpsRequestPromise({
-    headers: {
-      'Accept': 'application/vnd.github.machine-man-preview+json',
-      'Authorization': `Bearer ${getJWT()}`,
-      'User-Agent': config.appName
-    },
-    hostname: 'api.github.com',
-    method: 'POST',
-    path: `/app/installations/${installationId}/access_tokens`
-  })
-    .then((response) => {
-      const json = JSON.parse(response);
-      cache.storeAccessToken(installationId, json.token, json.expires_at);
-      return json.token;
-    });
-}
+  const cachedToken = cache.getAccessToken(installationId, new Date());
+  return cachedToken !== null
+    ? Promise.resolve(cachedToken)
+    : getInstallationAccessToken(installationId, config.appId);
+};
 
 const processPushWebhook = (payload) => {
   getAccessTokenPromise(payload.installation.id)
@@ -141,18 +122,20 @@ const processPushWebhook = (payload) => {
     .catch(err => console.log(err))
 };
 
-const setupExpress = (app) => {
+const setupExpress = () => {
+  const app = express();
+
   app.use(bodyParser.json());
   app.use(bodyParser.urlencoded({ extended: true }));
   app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', 'http://localhost:8080');
     res.setHeader(
       'Access-Control-Allow-Methods',
-      utils.toHeaderField(['GET', 'POST', 'OPTIONS', 'PUT', 'PATCH', 'DELETE'])
+      toHeaderField(['GET', 'POST', 'OPTIONS', 'PUT', 'PATCH', 'DELETE'])
     );
     res.setHeader(
       'Access-Control-Allow-Headers',
-      utils.toHeaderField(['X-Requested-With', 'Content-Type', 'Accept'])
+      toHeaderField(['X-Requested-With', 'Content-Type', 'Accept'])
     );
     next();
   });
@@ -166,35 +149,18 @@ const setupExpress = (app) => {
 
   // POST routes.
   app.post('/authenticate', (req, res) => {
-    const postData = {
-      client_id: config.clientId,
-      client_secret: config.clientSecret,
-      code: req.body.code
-    };
-
-    const postConfig = {
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      hostname: 'github.com',
-      method: 'POST',
-      path: '/login/oauth/access_token'
-    };
-
     // Forward access token request to GitHub.
-    utils.httpsRequestPromise(postConfig, JSON.stringify(postData))
+    getAccessToken(config.clientId, config.clientSecret, req.body.code)
       .then((response) => {
-        console.log(response);
         res.status(httpStatus.OK);
-        res.send(response);
+        res.send(response.data);
         res.end();
       })
       .catch((err) => {
         res.status(httpStatus.INTERNAL_SERVER_ERROR);
         res.end();
 
-        console.log(err);
+        console.error(err);
       });
   });
   app.post('/webhook', (req, res) => {
@@ -203,31 +169,21 @@ const setupExpress = (app) => {
 
     processPushWebhook(req.body);
   });
-};
 
-const test = () => {
-  const text = fs.readFileSync(path.join(__dirname, '../testing', 'sampleWebhook.json'));
-  const payload = JSON.parse(text);
-
-  processPushWebhook(payload);
-  // setTimeout(() => processPushWebhook(payload), 5000);
-};
-
-function main() {
-  setupExpress(app);
-
-  server.listen(port, hostname, (err) => {
+  app.listen(process.env.PORT, (err) => {
     if (err) {
       throw err;
     }
 
-    console.log(`Listening on port ${port}...`);
+    console.log(`Listening on port ${process.env.PORT}...`);
   });
+};
+
+function main() {
+  setupExpress();
 
   // Clear cached postData every 5 minutes.
   setInterval(() => cache.clear(new Date()), 300000);
-
-  test();
 }
 
 main();
