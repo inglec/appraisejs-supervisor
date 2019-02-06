@@ -3,4 +3,3 @@ keys
 node_modules
 npm-debug.log
 package-lock.json
-setup/windows/env.ps1
