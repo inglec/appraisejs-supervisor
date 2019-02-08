@@ -5,24 +5,15 @@ const GITHUB_APPS_MEDIA_TYPE = 'application/vnd.github.machine-man-preview+json'
 const GITHUB_URL = 'https://github.com';
 
 // Fetch OAuth access token for a given installation.
-const getInstallationAccessToken = (installationId, appName) => axios.request({
+const getInstallationAccessToken = (installationId, jwt, appName) => axios.request({
   method: 'POST',
   baseURL: GITHUB_API_URL,
   url: `/app/installations/${installationId}/access_tokens`,
   headers: {
     'Accept': GITHUB_APPS_MEDIA_TYPE,
-    'Authorization': `Bearer ${getJWT()}`,
+    'Authorization': `Bearer ${jwt}`,
     'User-Agent': appName
   },
-  transformResponse: [(response) => {
-    const {
-      expires_at: expiry,
-      token,
-    } = JSON.parse(response);
-
-    cache.storeAccessToken(installationId, token, expiry);
-    return token;
-  }],
 });
 
 // Exchange code for OAuth access token.

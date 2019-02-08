@@ -8,74 +8,17 @@ const jwt = require('jsonwebtoken');
 const path = require('path');
 
 const config = require('../config.json');
+
+const Cache = require('./cache');
+const JobQueue = require('./job_queue');
 const {
   getAccessToken,
   getInstallationAccessToken,
 } = require('./utils/github_api');
 const { toHeaderField } = require('./utils/requests');
 
-const cache = {
-  accessTokens: {},
-  jwt: null,
-  getAccessToken: function(installationId, timestamp) {
-    if (installationId in this.accessTokens) {
-      const { expiry, token } = this.accessTokens[installationId];
-      if (timestamp < expiry) {
-        return token;
-      }
-      delete this.accessTokens[installationId];
-    }
-    return null;
-  },
-  getJWT: function(timestamp) {
-    if (this.jwt !== null) {
-      const { expiry, token } = this.jwt;
-      if (timestamp < expiry) {
-        return token;
-      }
-      this.jwt = null;
-    }
-    return null;
-  },
-  storeAccessToken: function(installationId, token, timestamp) {
-    this.accessTokens[installationId] = {
-      expiry: new Date(timestamp),
-      token
-    };
-  },
-  storeJWT: function(token, timestamp) {
-    this.jwt = {
-      expiry: new Date(timestamp),
-      token
-    };
-  },
-  clear: function(timestamp) {
-    // Clear expired access tokens.
-    _.forEach(cache.accessTokens, (accessToken, installationId) => {
-      if (timestamp > accessToken.expiry) {
-        delete cache.accessTokens[installationId];
-        console.log(`Cleared expired access token ${installationId}`);
-      }
-    });
-
-    // Reset expired JSON Web Token.
-    if (cache.jwt !== null && cache.jwt.expiry < timestamp) {
-      cache.jwt = null;
-      console.log('Cleared expired JWT');
-    }
-  }
-};
-
-// TODO: Implement job queue.
-const jobQueue = {
-  jobs: [],
-  enqueue: function(job) {
-    this.jobs.push(job);
-  },
-  dequeue: function() {
-    return this.jobs.shift();
-  }
-};
+const cache = new Cache();
+const queue = new JobQueue();
 
 const getJWT = () => {
   const time = new Date();
@@ -107,7 +50,16 @@ const getAccessTokenPromise = (installationId) => {
   const cachedToken = cache.getAccessToken(installationId, new Date());
   return cachedToken !== null
     ? Promise.resolve(cachedToken)
-    : getInstallationAccessToken(installationId, config.appId);
+    : getInstallationAccessToken(installationId, getJWT(), config.appId)
+      .then((response) => {
+        const {
+          expires_at: expiry,
+          token,
+        } = response.data;
+
+        cache.storeAccessToken(installationId, token, expiry);
+        return token;
+      });
 };
 
 const processPushWebhook = (payload) => {
@@ -179,11 +131,17 @@ const setupExpress = () => {
   });
 };
 
+const test = () => {
+  processPushWebhook({ installation: { id: 611777 }})
+};
+
 function main() {
   setupExpress();
 
   // Clear cached postData every 5 minutes.
   setInterval(() => cache.clear(new Date()), 300000);
+
+  test();
 }
 
 main();
