@@ -10,6 +10,6 @@ class JobQueue {
   dequeue() {
     return this.jobs.shift();
   }
-};
+}
 
 module.exports = JobQueue;

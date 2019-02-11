@@ -10,9 +10,9 @@ const getInstallationAccessToken = (installationId, jwt, appName) => axios.reque
   baseURL: GITHUB_API_URL,
   url: `/app/installations/${installationId}/access_tokens`,
   headers: {
-    'Accept': GITHUB_APPS_MEDIA_TYPE,
-    'Authorization': `Bearer ${jwt}`,
-    'User-Agent': appName
+    Accept: GITHUB_APPS_MEDIA_TYPE,
+    Authorization: `Bearer ${jwt}`,
+    'User-Agent': appName,
   },
 });
 
@@ -22,7 +22,7 @@ const getAccessToken = (clientId, clientSecret, code) => axios.request({
   baseURL: GITHUB_URL,
   url: '/login/oauth/access_token',
   headers: {
-    'Accept': 'application/json',
+    Accept: 'application/json',
     'Content-Type': 'application/json',
   },
   data: {

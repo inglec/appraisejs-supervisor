@@ -1,5 +1,3 @@
-const axios = require('axios');
-const _ = require('lodash');
 const bodyParser = require('body-parser');
 const express = require('express');
 const fs = require('fs');
@@ -10,7 +8,7 @@ const path = require('path');
 const config = require('../config.json');
 
 const Cache = require('./cache');
-const JobQueue = require('./job_queue');
+// const JobQueue = require('./job_queue');
 const {
   getAccessToken,
   getInstallationAccessToken,
@@ -18,7 +16,7 @@ const {
 const { toHeaderField } = require('./utils/requests');
 
 const cache = new Cache();
-const queue = new JobQueue();
+// const queue = new JobQueue();
 
 const getJWT = () => {
   const time = new Date();
@@ -34,7 +32,7 @@ const getJWT = () => {
   const payload = {
     iat: seconds, // Issued at time.
     exp: expiry, // Expiration time (10 minute maximum).
-    iss: config.appId
+    iss: config.appId,
   };
 
   // Sign JSON Web Token and encode with RS256.
@@ -44,7 +42,7 @@ const getJWT = () => {
   cache.storeJWT(token, expiry * 1000);
 
   return token;
-}
+};
 
 const getAccessTokenPromise = (installationId) => {
   const cachedToken = cache.getAccessToken(installationId, new Date());
@@ -71,7 +69,7 @@ const processPushWebhook = (payload) => {
       //
       // });
     })
-    .catch(err => console.log(err))
+    .catch(err => console.log(err));
 };
 
 const setupExpress = () => {
@@ -83,11 +81,11 @@ const setupExpress = () => {
     res.setHeader('Access-Control-Allow-Origin', 'http://localhost:8080');
     res.setHeader(
       'Access-Control-Allow-Methods',
-      toHeaderField(['GET', 'POST', 'OPTIONS', 'PUT', 'PATCH', 'DELETE'])
+      toHeaderField(['GET', 'POST', 'OPTIONS', 'PUT', 'PATCH', 'DELETE']),
     );
     res.setHeader(
       'Access-Control-Allow-Headers',
-      toHeaderField(['X-Requested-With', 'Content-Type', 'Accept'])
+      toHeaderField(['X-Requested-With', 'Content-Type', 'Accept']),
     );
     next();
   });
@@ -132,7 +130,7 @@ const setupExpress = () => {
 };
 
 const test = () => {
-  processPushWebhook({ installation: { id: 611777 }})
+  processPushWebhook({ installation: { id: 611777 } });
 };
 
 function main() {
