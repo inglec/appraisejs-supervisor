@@ -8,14 +8,12 @@ class Cache {
 
   getAccessToken(installationId, timestamp) {
     if (installationId in this.accessTokens) {
-      const {
-        expiry,
-        token,
-      } = this.accessTokens[installationId];
-
+      const { expiry, token } = this.accessTokens[installationId];
       if (timestamp < expiry) {
         return token;
       }
+
+      // Token is expired.
       delete this.accessTokens[installationId];
     }
 
@@ -24,14 +22,11 @@ class Cache {
 
   getJWT(timestamp) {
     if (this.jwt !== null) {
-      const {
-        expiry,
-        token,
-      } = this.jwt;
-
+      const { expiry, token } = this.jwt;
       if (timestamp < expiry) {
         return token;
       }
+
       this.jwt = null;
     }
 

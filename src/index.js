@@ -1,18 +1,15 @@
 const bodyParser = require('body-parser');
 const express = require('express');
-const fs = require('fs');
-const httpStatus = require('http-status-codes');
-const jwt = require('jsonwebtoken');
-const path = require('path');
+const { readFileSync } = require('fs');
+const { INTERNAL_SERVER_ERROR, OK } = require('http-status-codes');
+const { sign } = require('jsonwebtoken');
+const { join } = require('path');
 
 const config = require('../config.json');
 
 const Cache = require('./cache');
 // const JobQueue = require('./job_queue');
-const {
-  getAccessToken,
-  getInstallationAccessToken,
-} = require('./utils/github_api');
+const { getAccessToken, getInstallationAccessToken } = require('./utils/github_api');
 const { toHeaderField } = require('./utils/requests');
 
 const cache = new Cache();
@@ -21,9 +18,9 @@ const cache = new Cache();
 const getJWT = () => {
   const time = new Date();
 
-  const cachedJWT = cache.getJWT();
-  if (cachedJWT !== null) {
-    return cachedJWT;
+  const cachedJwt = cache.getJWT();
+  if (cachedJwt !== null) {
+    return cachedJwt;
   }
 
   // Generate new JWT.
@@ -36,26 +33,24 @@ const getJWT = () => {
   };
 
   // Sign JSON Web Token and encode with RS256.
-  const privateKey = fs.readFileSync(path.join(__dirname, '../keys', 'private-key.pem'));
-  const token = jwt.sign(payload, privateKey, { algorithm: 'RS256' });
+  const privateKey = readFileSync(join(__dirname, '../keys', 'private-key.pem'));
+  const jwt = sign(payload, privateKey, { algorithm: 'RS256' });
 
-  cache.storeJWT(token, expiry * 1000);
+  cache.storeJWT(jwt, expiry * 1000);
 
-  return token;
+  return jwt;
 };
 
 const getAccessTokenPromise = (installationId) => {
   const cachedToken = cache.getAccessToken(installationId, new Date());
+
   return cachedToken !== null
     ? Promise.resolve(cachedToken)
     : getInstallationAccessToken(installationId, getJWT(), config.appId)
       .then((response) => {
-        const {
-          expires_at: expiry,
-          token,
-        } = response.data;
-
+        const { expires_at: expiry, token } = response.data;
         cache.storeAccessToken(installationId, token, expiry);
+
         return token;
       });
 };
@@ -65,6 +60,7 @@ const processPushWebhook = (payload) => {
     .then((token) => {
       console.log(token);
 
+      // TODO: Create job for each commit.
       // payload.commits.forEach((commit) => {
       //
       // });
@@ -92,7 +88,7 @@ const setupExpress = () => {
 
   // GET routes.
   app.get('/', (req, res) => {
-    res.status(httpStatus.OK);
+    res.status(OK);
     res.send('Test route');
     res.end();
   });
@@ -102,19 +98,19 @@ const setupExpress = () => {
     // Forward access token request to GitHub.
     getAccessToken(config.clientId, config.clientSecret, req.body.code)
       .then((response) => {
-        res.status(httpStatus.OK);
+        res.status(OK);
         res.send(response.data);
         res.end();
       })
       .catch((err) => {
-        res.status(httpStatus.INTERNAL_SERVER_ERROR);
+        res.status(INTERNAL_SERVER_ERROR);
         res.end();
 
         console.error(err);
       });
   });
   app.post('/webhook', (req, res) => {
-    res.status(httpStatus.OK);
+    res.status(OK);
     res.end();
 
     processPushWebhook(req.body);
