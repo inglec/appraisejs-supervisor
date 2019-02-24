@@ -12,7 +12,4 @@ const appendUrlParams = (url, params) => {
 
 const toHeaderField = array => array.join(', ');
 
-module.exports = {
-  appendUrlParams,
-  toHeaderField,
-};
+module.exports = { appendUrlParams, toHeaderField };

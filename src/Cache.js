@@ -20,8 +20,8 @@ class Cache {
     return null;
   }
 
-  getJWT(timestamp) {
-    if (this.jwt !== null) {
+  getJwt(timestamp) {
+    if (this.jwt) {
       const { expiry, token } = this.jwt;
       if (timestamp < expiry) {
         return token;
