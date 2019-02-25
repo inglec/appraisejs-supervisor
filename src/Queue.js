@@ -50,6 +50,14 @@ class Queue {
   setOnEnqueue(callback) {
     this.onEnqueue = callback;
   }
+
+  length() {
+    return this.queue.length;
+  }
+
+  isEmpty() {
+    return this.length() === 0;
+  }
 }
 
 module.exports = Queue;
