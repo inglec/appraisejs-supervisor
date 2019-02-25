@@ -13,7 +13,7 @@ class Cache {
         return token;
       }
 
-      // Token is expired.
+      // Token is expired
       delete this.accessTokens[installationId];
     }
 
@@ -48,14 +48,14 @@ class Cache {
   }
 
   clear(timestamp) {
-    // Clear expired access tokens.
+    // Clear expired access tokens
     _.forEach(this.accessTokens, (accessToken, installationId) => {
       if (timestamp > accessToken.expiry) {
         delete this.accessTokens[installationId];
       }
     });
 
-    // Clear expired JSON Web Token.
+    // Clear expired JSON Web Token
     if (_.get(this.jwt, 'expiry') < timestamp) {
       this.jwt = null;
     }
