@@ -3,14 +3,14 @@ const esprima = require('esprima');
 const escodegen = require('escodegen');
 
 const getFunctionObjects = (program) => {
-  // Generate AST from program.
+  // Generate AST from program
   const parsed = esprima.parse(program, {
-    jsx: true, // Support JSX syntax.
-    loc: true, // Annotate column + row location.
-    range: true, // Annotate index location.
+    jsx: true, // Support JSX syntax
+    loc: true, // Annotate column + row location
+    range: true, // Annotate index location
   });
 
-  // TODO: Support function variables.
+  // TODO: Support function variables
   const functionNodes = _.filter(parsed.body, node => (
     node.type === esprima.Syntax.FunctionDeclaration
   ));
@@ -20,7 +20,7 @@ const getFunctionObjects = (program) => {
 
 const generateFunctions = functionObjects => (
   _.map(functionObjects, (obj) => {
-    // Generate text from AST nodes.
+    // Generate text from AST nodes
     const body = escodegen.generate(obj.body);
     const params = _.map(obj.params, escodegen.generate);
 

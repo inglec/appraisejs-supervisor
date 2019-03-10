@@ -4,9 +4,9 @@ const GITHUB_API_URL = 'https://api.github.com';
 const GITHUB_APPS_MEDIA_TYPE = 'application/vnd.github.machine-man-preview+json';
 const GITHUB_URL = 'https://github.com';
 
-// Exchange code for OAuth access token.
+// Exchange code for OAuth access token
 const fetchClientAccessToken = (clientId, clientSecret, code) => (
-  axios.request({
+  axios({
     method: 'POST',
     baseURL: GITHUB_URL,
     url: '/login/oauth/access_token',
@@ -22,9 +22,9 @@ const fetchClientAccessToken = (clientId, clientSecret, code) => (
   })
 );
 
-// Fetch OAuth access token for a given installation.
+// Fetch OAuth access token for a given installation
 const fetchInstallationAccessToken = (installationId, jwt, appName) => (
-  axios.request({
+  axios({
     method: 'POST',
     baseURL: GITHUB_API_URL,
     url: `/app/installations/${installationId}/access_tokens`,

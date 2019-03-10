@@ -1,13 +1,13 @@
 const { default: createLogger } = require('logging');
 
-const app = require('./app');
+const { app } = require('./app');
 
-const logger = createLogger('Server');
+const logger = createLogger('appraisejs');
 
 app.listen(process.env.PORT, (err) => {
   if (err) {
     throw err;
   }
 
-  logger.info(`Listening on port ${process.env.PORT}...`);
+  logger.info(`Listening on port ${process.env.PORT}`);
 });

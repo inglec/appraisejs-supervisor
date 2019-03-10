@@ -36,27 +36,15 @@ class Queue {
       this.onDequeue(dequeued, this.queue);
     }
 
-    return this.queue;
+    return dequeued;
   }
 
-  setOnChange(callback) {
-    this.onChange = callback;
-  }
-
-  setOnDequeue(callback) {
-    this.onDequeue = callback;
-  }
-
-  setOnEnqueue(callback) {
-    this.onEnqueue = callback;
-  }
-
-  length() {
+  get length() {
     return this.queue.length;
   }
 
-  isEmpty() {
-    return this.length() === 0;
+  get isEmpty() {
+    return this.queue.length === 0;
   }
 }
 
