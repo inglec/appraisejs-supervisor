@@ -1,0 +1,7 @@
+{
+  "appId": 23609,
+  "appName": "AppraiseJs",
+  "urls": {
+    "apiServer": "http://localhost:4000"
+  }
+}

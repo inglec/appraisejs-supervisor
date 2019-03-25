@@ -1,36 +1,40 @@
 const bodyParser = require('body-parser');
 const express = require('express');
 const { readFile: readFileCallback } = require('fs');
-const { BAD_REQUEST, INTERNAL_SERVER_ERROR } = require('http-status-codes');
-const { sign } = require('jsonwebtoken');
-const { pick } = require('lodash');
+const { BAD_REQUEST, INTERNAL_SERVER_ERROR, OK } = require('http-status-codes');
+const { sign: signCallback } = require('jsonwebtoken');
+const { pick } = require('lodash/object');
 const { join } = require('path');
 const { default: createLogger } = require('logging');
+const requestPromise = require('request-promise-native');
 const { promisify } = require('util');
 
 const { fetchClientAccessToken, fetchInstallationAccessToken } = require('./utils/github_api');
-const { toHeaderField } = require('./utils/requests');
 const Cache = require('./Cache');
 const Queue = require('./Queue');
 const Worker = require('./Worker');
 
-const {
-  appId: APP_ID,
-  clientId: CLIENT_ID,
-  clientSecret: CLIENT_SECRET,
-} = require('../config.json');
+const { appId: APP_ID, urls: { apiServer: API_SERVER_URL } } = require('../config.json');
 
-const readFile = promisify(readFileCallback);
+const { CLIENT_ID, CLIENT_SECRET, NODE_PATH } = process.env;
+if (!CLIENT_ID) {
+  throw Error('environment variable CLIENT_ID not set');
+} else if (!CLIENT_SECRET) {
+  throw Error('environment variable CLIENT_SECRET not set');
+} else if (!NODE_PATH) {
+  throw Error('environment variable NODE_PATH not set');
+}
 
-const PRIVATE_KEY_PATH = join(process.env.NODE_PATH, 'keys/private-key.pem');
+const PRIVATE_KEY_PATH = join(NODE_PATH, 'keys/private-key.pem');
 
 const cache = new Cache();
 const jobIdQueue = new Queue();
 const jobs = {};
+const logger = createLogger('appraisejs');
+const readFile = promisify(readFileCallback);
+const sign = promisify(signCallback);
 const workerIdQueue = new Queue();
 const workers = {};
-
-const logger = createLogger('appraisejs');
 
 const getJwt = () => {
   const cachedJwt = cache.getJwt();
@@ -51,11 +55,9 @@ const getJwt = () => {
 
   return (
     readFile(PRIVATE_KEY_PATH)
-      .then((privateKey) => {
-        // Sign JSON Web Token and encode with RS256
-        const jwt = sign(payload, privateKey, { algorithm: 'RS256' });
+      .then(privateKey => sign(payload, privateKey, { algorithm: 'RS256' }))
+      .then((jwt) => {
         cache.storeJWT(jwt, expiry * 1000);
-
         return jwt;
       })
   );
@@ -82,19 +84,27 @@ const getAccessToken = (installationId) => {
   );
 };
 
+const createJobId = ({ commitId, owner, repository }) => `${owner}/${repository}/${commitId}`;
+
 const addJob = (job) => {
-  const jobId = `${job.installationId}/${job.owner}/${job.repository}/${job.commitId}`;
+  const jobId = createJobId(job);
   if (jobId in jobs) {
     throw Error(`job ${jobId} already in queue`);
   }
 
-  jobs[jobId] = {
-    ...job,
-    inProgress: false,
-  };
-  jobIdQueue.enqueue(jobId);
+  logger.debug('adding new job', jobId, job);
 
-  logger.debug('new job', jobId, job);
+  jobs[jobId] = job;
+  jobIdQueue.enqueue(jobId);
+};
+
+const removeJob = (jobId) => {
+  if (jobId in jobs) {
+    logger.debug('removing job', jobId);
+    delete jobs[jobId];
+  } else {
+    logger.error('tried to remove non-existent job', jobId);
+  }
 };
 
 const allocateJobs = () => {
@@ -108,7 +118,8 @@ const allocateJobs = () => {
     const job = jobs[jobId];
     const worker = workers[workerId];
 
-    job.inProgress = true;
+    // Update job in pool
+    job.workerId = workerId;
 
     getAccessToken(job.installationId)
       .then(accessToken => (
@@ -119,40 +130,59 @@ const allocateJobs = () => {
   }
 };
 
-const addWorker = (ip, port) => {
-  const workerId = port ? `${ip}:${port}` : ip;
+const addWorker = async (url) => {
+  const { workerId } = await requestPromise({
+    uri: `${url}/identity`,
+    json: true,
+  });
+
   if (workerId in workers) {
     throw Error(`worker ${workerId} already exists in pool`);
   }
 
-  workers[workerId] = new Worker(ip, port);
+  logger.debug('adding worker', workerId);
+  workers[workerId] = new Worker(workerId, url);
   workerIdQueue.enqueue(workerId);
-
-  logger.debug('new worker', workerId, 'added to pool');
 
   // Attempt to assign queued jobs to the new worker
   allocateJobs();
 };
 
+const freeWorker = (workerId) => {
+  logger.debug('free worker', workerId);
+
+  if (workerId in workers) {
+    workers[workerId].free();
+    workerIdQueue.enqueue(workerId);
+  } else {
+    logger.error('tried to free non-existent worker', workerId);
+  }
+};
+
 // https://developer.github.com/v3/activity/events/types/#pushevent
 const handlePushEvent = ({ commits, installation, repository }) => {
+  const time = new Date().getTime();
+
   // Enqueue new jobs
   commits
     .filter(commit => commit.distinct)
-    .forEach((commit) => {
+    .forEach(commit => (
       addJob({
-        commitId: commit.id,
         installationId: installation.id,
         owner: repository.owner.login,
         repository: repository.name,
-      });
-    });
+        repositoryId: repository.id,
+        commitId: commit.id,
+        queuedAt: time,
+        workerId: null,
+      })
+    ));
 
   // Attempt to assign the new jobs to any free workers
   allocateJobs();
 };
 
-const setupExpress = () => {
+const setupExpress = (clientId, clientSecret) => {
   const app = express();
   const appLogger = createLogger('appraisejs:app');
 
@@ -162,14 +192,12 @@ const setupExpress = () => {
     appLogger.debug(req.method, req.originalUrl, req.body);
 
     res.setHeader('Access-Control-Allow-Origin', 'http://localhost:8080');
-    res.setHeader(
-      'Access-Control-Allow-Methods',
-      toHeaderField(['GET', 'POST', 'OPTIONS', 'PUT', 'PATCH', 'DELETE']),
-    );
+    res.setHeader('Access-Control-Allow-Methods', 'POST');
     res.setHeader(
       'Access-Control-Allow-Headers',
-      toHeaderField(['X-Requested-With', 'Content-Type', 'Accept']),
+      ['X-Requested-With', 'Content-Type', 'Accept'].join(', '),
     );
+
     next();
   });
 
@@ -178,25 +206,71 @@ const setupExpress = () => {
 
   // Add a new IP to the worker pool
   app.post('/addWorker', (req, res) => {
-    const { ip, port } = req.body;
+    const { url } = req.body;
 
-    if (ip) {
-      addWorker(ip, port);
-      res.end();
+    if (!url) {
+      res.status(BAD_REQUEST).send('No URL specified');
     } else {
-      res.status(BAD_REQUEST).send('No IP address specified');
+      res.end();
+      addWorker(url);
     }
   });
 
   // Proxy client OAuth requests to GitHub
   app.post('/authenticate', (req, res) => {
+    const { code } = req.body;
+
     // Forward access token request to GitHub
-    fetchClientAccessToken(CLIENT_ID, CLIENT_SECRET, req.body.code)
+    fetchClientAccessToken(clientId, clientSecret, code)
       .then(response => res.send(response.data))
       .catch((err) => {
         appLogger.error(err);
         res.status(INTERNAL_SERVER_ERROR).end();
       });
+  });
+
+  // Receive benchmark results from a worker server
+  app.post('/results', (req, res) => {
+    res.end();
+
+    const {
+      commitId,
+      owner,
+      repository,
+      workerId,
+    } = req.body;
+
+    const jobId = createJobId({ commitId, owner, repository });
+    const job = jobs[jobId];
+    logger.debug(job);
+
+    // Data to send to API server
+    const data = {
+      ...job,
+      ...req.body,
+    };
+
+    // Send results to API server
+    const request = requestPromise({
+      method: 'POST',
+      uri: `${API_SERVER_URL}/submitTest`,
+      body: data,
+      json: true,
+      resolveWithFullResponse: true,
+    });
+
+    request
+      .then(({ body, statusCode }) => {
+        if (statusCode !== OK) {
+          throw Error(`API server returned ${statusCode} response: ${body}`);
+        }
+
+        removeJob(jobId);
+        freeWorker(workerId);
+
+        return undefined;
+      })
+      .catch(error => logger.error(error));
   });
 
   // Receive a webhook event from GitHub
@@ -217,7 +291,7 @@ const setupExpress = () => {
 };
 
 function main() {
-  const app = setupExpress();
+  const app = setupExpress(CLIENT_ID, CLIENT_SECRET);
 
   // Clear cache every 5 minutes
   setInterval(() => cache.clear(new Date()), 300000);

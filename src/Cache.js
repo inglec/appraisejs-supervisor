@@ -1,4 +1,5 @@
-const _ = require('lodash');
+const { forEach } = require('lodash/collection');
+const { get } = require('lodash/object');
 
 class Cache {
   constructor() {
@@ -49,14 +50,14 @@ class Cache {
 
   clear(timestamp) {
     // Clear expired access tokens
-    _.forEach(this.accessTokens, (accessToken, installationId) => {
+    forEach(this.accessTokens, (accessToken, installationId) => {
       if (timestamp > accessToken.expiry) {
         delete this.accessTokens[installationId];
       }
     });
 
     // Clear expired JSON Web Token
-    if (_.get(this.jwt, 'expiry') < timestamp) {
+    if (get(this.jwt, 'expiry') < timestamp) {
       this.jwt = null;
     }
   }

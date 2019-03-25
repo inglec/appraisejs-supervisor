@@ -1,4 +1,4 @@
-const _ = require('lodash');
+const { filter, map } = require('lodash/collection');
 const esprima = require('esprima');
 const escodegen = require('escodegen');
 
@@ -11,7 +11,7 @@ const getFunctionObjects = (program) => {
   });
 
   // TODO: Support function variables
-  const functionNodes = _.filter(parsed.body, node => (
+  const functionNodes = filter(parsed.body, node => (
     node.type === esprima.Syntax.FunctionDeclaration
   ));
 
@@ -19,10 +19,10 @@ const getFunctionObjects = (program) => {
 };
 
 const generateFunctions = functionObjects => (
-  _.map(functionObjects, (obj) => {
+  map(functionObjects, (obj) => {
     // Generate text from AST nodes
     const body = escodegen.generate(obj.body);
-    const params = _.map(obj.params, escodegen.generate);
+    const params = map(obj.params, escodegen.generate);
 
     // eslint-disable-next-line no-new-func
     return new Function(...params, body);

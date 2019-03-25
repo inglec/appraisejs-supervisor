@@ -25,6 +25,6 @@ const buildUrl = ({
   return url;
 };
 
-const toHeaderField = array => array.join(', ');
+const toHeaderField = (...args) => args;
 
 module.exports = { appendUrlParams, buildUrl, toHeaderField };

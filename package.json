@@ -1,17 +1,18 @@
 {
-  "name": "fyp-webhook-server",
+  "name": "appraisejs-supervisor",
   "version": "1.0.0",
   "description": "Handle GitHub webhooks and allocate jobs to worker servers",
   "author": "Ciarán Ingle",
   "scripts": {
     "lint": "eslint src",
-    "start": "NODE_PATH=. PORT=3000 nodemon src/server.js",
-    "test": "NODE_PATH=. PORT=3000 jest"
+    "start": "NODE_PATH=. nodemon -r dotenv/config src/server.js",
+    "test": "NODE_PATH=. jest"
   },
   "dependencies": {
     "axios": "^0.18.0",
     "body-parser": "^1.18.3",
     "command-line-args": "^5.0.2",
+    "dotenv": "^7.0.0",
     "escodegen": "^1.11.0",
     "esprima": "^4.0.1",
     "express": "^4.16.4",
@@ -20,6 +21,7 @@
     "lodash": "^4.17.11",
     "logging": "^3.2.0",
     "request-promise-native": "^1.0.7",
+    "supertest": "^3.4.2",
     "uuid": "^3.3.2"
   },
   "devDependencies": {
@@ -29,8 +31,7 @@
     "eslint-plugin-jest": "^22.3.0",
     "eslint-plugin-promise": "^4.0.1",
     "jest": "^24.1.0",
-    "nodemon": "^1.18.9",
-    "supertest": "^3.4.2"
+    "nodemon": "^1.18.9"
   },
   "jest": {
     "testEnvironment": "node"
