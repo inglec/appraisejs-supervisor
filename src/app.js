@@ -10,6 +10,7 @@ const requestPromise = require('request-promise-native');
 const { promisify } = require('util');
 
 const { fetchClientAccessToken, fetchInstallationAccessToken } = require('./utils/github_api');
+const { getMissingFields } = require('./utils/requests');
 const Cache = require('./Cache');
 const Queue = require('./Queue');
 const Worker = require('./Worker');
@@ -94,7 +95,11 @@ const addJob = (job) => {
 
   logger.debug('adding new job', jobId, job);
 
-  jobs[jobId] = job;
+  jobs[jobId] = {
+    ...job,
+    queuedAt: new Date().getTime(),
+    workerId: null,
+  };
   jobIdQueue.enqueue(jobId);
 };
 
@@ -161,8 +166,6 @@ const freeWorker = (workerId) => {
 
 // https://developer.github.com/v3/activity/events/types/#pushevent
 const handlePushEvent = ({ commits, installation, repository }) => {
-  const time = new Date().getTime();
-
   // Enqueue new jobs
   commits
     .filter(commit => commit.distinct)
@@ -173,13 +176,59 @@ const handlePushEvent = ({ commits, installation, repository }) => {
         repository: repository.name,
         repositoryId: repository.id,
         commitId: commit.id,
-        queuedAt: time,
-        workerId: null,
       })
     ));
 
   // Attempt to assign the new jobs to any free workers
   allocateJobs();
+};
+
+const handleRetest = (payload) => {
+  addJob(payload);
+  allocateJobs();
+};
+
+const handleResults = (results) => {
+  const {
+    commitId,
+    owner,
+    repository,
+    workerId,
+  } = results;
+
+  const jobId = createJobId({ commitId, owner, repository });
+  const job = jobs[jobId];
+  logger.debug(job);
+
+  // Data to send to API server
+  const data = {
+    ...job,
+    ...results,
+  };
+
+  // Send results to API server
+  const request = requestPromise({
+    method: 'POST',
+    uri: `${API_SERVER_URL}/submitTest`,
+    body: data,
+    json: true,
+    resolveWithFullResponse: true,
+  });
+
+  return (
+    request
+      .then(({ body, statusCode }) => {
+        if (statusCode !== OK) {
+          throw Error(`API server returned ${statusCode} response: ${body}`);
+        }
+
+        removeJob(jobId);
+        freeWorker(workerId);
+
+        return undefined;
+      })
+      .catch(error => logger.error(error))
+  );
 };
 
 const setupExpress = (clientId, clientSecret) => {
@@ -224,53 +273,34 @@ const setupExpress = (clientId, clientSecret) => {
     fetchClientAccessToken(clientId, clientSecret, code)
       .then(response => res.send(response.data))
       .catch((err) => {
-        appLogger.error(err);
         res.status(INTERNAL_SERVER_ERROR).end();
+        appLogger.error(err);
       });
   });
 
   // Receive benchmark results from a worker server
   app.post('/results', (req, res) => {
-    res.end();
+    const requiredFields = ['commitId', 'owner', 'repository', 'workerId'];
+    const missingFields = getMissingFields(req.body, requiredFields);
 
-    const {
-      commitId,
-      owner,
-      repository,
-      workerId,
-    } = req.body;
+    if (missingFields.length > 0) {
+      res.status(BAD_REQUEST).send(`missing fields ${missingFields.join(', ')}`);
+    } else {
+      res.end();
+      handleResults(req.body);
+    }
+  });
 
-    const jobId = createJobId({ commitId, owner, repository });
-    const job = jobs[jobId];
-    logger.debug(job);
+  app.post('/retest', (req, res) => {
+    const requiredFields = ['commitId', 'installationId', 'owner', 'repository', 'repositoryId'];
+    const missingFields = getMissingFields(req.body, requiredFields);
 
-    // Data to send to API server
-    const data = {
-      ...job,
-      ...req.body,
-    };
-
-    // Send results to API server
-    const request = requestPromise({
-      method: 'POST',
-      uri: `${API_SERVER_URL}/submitTest`,
-      body: data,
-      json: true,
-      resolveWithFullResponse: true,
-    });
-
-    request
-      .then(({ body, statusCode }) => {
-        if (statusCode !== OK) {
-          throw Error(`API server returned ${statusCode} response: ${body}`);
-        }
-
-        removeJob(jobId);
-        freeWorker(workerId);
-
-        return undefined;
-      })
-      .catch(error => logger.error(error));
+    if (missingFields.length > 0) {
+      res.status(BAD_REQUEST).send(`missing fields ${missingFields.join(', ')}`);
+    } else {
+      res.end();
+      handleRetest(req.body);
+    }
   });
 
   // Receive a webhook event from GitHub
@@ -279,8 +309,8 @@ const setupExpress = (clientId, clientSecret) => {
     const eventName = req.headers['x-github-event'];
     switch (eventName) {
       case 'push':
-        handlePushEvent(req.body);
         res.end();
+        handlePushEvent(req.body);
         break;
       default:
         res.status(BAD_REQUEST).send(`unrecognised webhook event "${eventName}"`);

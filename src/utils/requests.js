@@ -25,6 +25,14 @@ const buildUrl = ({
   return url;
 };
 
-const toHeaderField = (...args) => args;
+const getMissingFields = (object, keys) => (
+  keys.reduce((acc, key) => {
+    if (!object[key]) {
+      acc.push(key);
+    }
 
-module.exports = { appendUrlParams, buildUrl, toHeaderField };
+    return acc;
+  }, [])
+);
+
+module.exports = { appendUrlParams, buildUrl, getMissingFields };
